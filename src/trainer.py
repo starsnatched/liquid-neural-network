@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import CosineAnnealingLR
 import logging
 from typing import Tuple
 
@@ -10,8 +10,8 @@ class TextTrainer:
         self.model = model.to(device)
         self.data_generator = data_generator
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-        self.scheduler = StepLR(self.optimizer, step_size=1000, gamma=0.1)
+        self.optimizer = optim.AdamW(self.model.parameters(), lr=learning_rate, weight_decay=0.01)
+        self.scheduler = CosineAnnealingLR(self.optimizer, T_max=10000, eta_min=1e-6)
         self.device = device
         logging.info(f"Using device: {self.device}")
 
@@ -35,9 +35,6 @@ class TextTrainer:
         perplexity = torch.exp(loss)
         return loss.item(), perplexity.item()
 
-    def generate_text(self, start_text: str, gen_length: int, temperature: float = 0.5) -> str:
-        return self.model.generate(self.data_generator, start_text, gen_length, temperature)
-
     def train(self, num_steps: int, print_every: int = 100, eval_every: int = 1000):
         best_loss = float('inf')
         steps_without_improvement = 0
@@ -50,6 +47,7 @@ class TextTrainer:
                     logging.info(f"Step {step}/{num_steps}")
                     logging.info(f"Loss: {loss:.4f}, Perplexity: {perplexity:.4f}")
                     logging.info(f"Learning rate: {self.scheduler.get_last_lr()[0]:.6f}")
+                    
 
                 if step % eval_every == 0:
                     eval_loss, eval_perplexity = self.evaluate()
@@ -62,6 +60,7 @@ class TextTrainer:
                         if steps_without_improvement >= 5000:
                             logging.info("Early stopping triggered")
                             break
+                    
 
         except KeyboardInterrupt:
             logging.info("Training interrupted by user.")
@@ -83,7 +82,7 @@ class TextTrainer:
             conversation_history.append(f"{user_input}")
             context = "\n".join(conversation_history[-5:])
 
-            model_response = self.generate_text(context, gen_length=50)
+            model_response = self.model.generate(self.data_generator, context, gen_length=50)
             
             clean_response = model_response.replace(f"{context}", "").strip()
             
@@ -101,11 +100,12 @@ class TextTrainer:
         
         if self.data_generator.vocab_size > old_vocab_size:
             self.model.expand_embedding(self.data_generator.vocab_size)
-            self.optimizer = optim.Adam(self.model.parameters(), lr=self.scheduler.get_last_lr()[0])
-            self.scheduler = StepLR(self.optimizer, step_size=1000, gamma=0.1)
+            self.optimizer = optim.AdamW(self.model.parameters(), lr=self.scheduler.get_last_lr()[0], weight_decay=0.01)
+            self.scheduler = CosineAnnealingLR(self.optimizer, T_max=10000, eta_min=1e-6)
             logging.info("Model updated with new vocabulary")
 
-        self.train_step()
+        for _ in range(5):
+            self.train_step()
 
     def save_checkpoint(self, filename: str = 'model_checkpoint.pth') -> None:
         checkpoint = {

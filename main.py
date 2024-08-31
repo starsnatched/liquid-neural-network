@@ -5,17 +5,17 @@ from src.models import LiquidNeuralNetwork
 from src.data_generator import TextDataGenerator
 from src.trainer import TextTrainer
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Liquid Neural Network Text Generation")
     parser.add_argument('--file_path', type=str, default='bible.txt', help='Path to the input text file')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
     parser.add_argument('--sequence_length', type=int, default=128, help='Sequence length for training')
-    parser.add_argument('--embed_size', type=int, default=128, help='Embedding size')
-    parser.add_argument('--hidden_sizes', type=int, nargs='+', default=[256, 128, 128, 64, 64, 32], help='Hidden layer sizes')
-    parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
-    parser.add_argument('--num_steps', type=int, default=500, help='Number of training steps')
+    parser.add_argument('--embed_size', type=int, default=256, help='Embedding size')
+    parser.add_argument('--hidden_sizes', type=int, nargs='+', default=[512, 256, 256, 128], help='Hidden layer sizes')
+    parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
+    parser.add_argument('--num_steps', type=int, default=10000, help='Number of training steps')
     parser.add_argument('--print_every', type=int, default=100, help='Print status every n steps')
     parser.add_argument('--checkpoint', type=str, default=None, help='Path to load checkpoint from')
     return parser.parse_args()
@@ -53,6 +53,7 @@ def main():
 
         if args.checkpoint:
             trainer.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            trainer.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
         logging.info("Starting training process...")
         trainer.train(args.num_steps, args.print_every)
