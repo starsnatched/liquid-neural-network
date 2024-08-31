@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.optim.lr_scheduler import StepLR
 import logging
 from typing import Tuple
 
@@ -10,6 +11,7 @@ class TextTrainer:
         self.data_generator = data_generator
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.scheduler = StepLR(self.optimizer, step_size=1000, gamma=0.1)
         self.device = device
         logging.info(f"Using device: {self.device}")
 
@@ -19,7 +21,8 @@ class TextTrainer:
 
         self.model.train()
         self.optimizer.zero_grad()
-        y_pred, _, _ = self.model(x)
+        
+        y_pred = self.model(x)
 
         loss = self.criterion(y_pred.view(-1, self.model.vocab_size), y_true.view(-1))
         loss.backward()
@@ -27,6 +30,7 @@ class TextTrainer:
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
         
         self.optimizer.step()
+        self.scheduler.step()
 
         perplexity = torch.exp(loss)
         return loss.item(), perplexity.item()
@@ -34,7 +38,10 @@ class TextTrainer:
     def generate_text(self, start_text: str, gen_length: int, temperature: float = 0.5) -> str:
         return self.model.generate(self.data_generator, start_text, gen_length, temperature)
 
-    def train(self, num_steps: int, print_every: int = 100):
+    def train(self, num_steps: int, print_every: int = 100, eval_every: int = 1000):
+        best_loss = float('inf')
+        steps_without_improvement = 0
+        
         try:
             for step in range(1, num_steps + 1):
                 loss, perplexity = self.train_step()
@@ -42,17 +49,27 @@ class TextTrainer:
                 if step % print_every == 0:
                     logging.info(f"Step {step}/{num_steps}")
                     logging.info(f"Loss: {loss:.4f}, Perplexity: {perplexity:.4f}")
+                    logging.info(f"Learning rate: {self.scheduler.get_last_lr()[0]:.6f}")
 
-                if step % (print_every * 10) == 0:
-                    self.adjust_learning_rate()
+                if step % eval_every == 0:
+                    eval_loss, eval_perplexity = self.evaluate()
+                    if eval_loss < best_loss:
+                        best_loss = eval_loss
+                        steps_without_improvement = 0
+                        self.save_checkpoint(filename='best_model_checkpoint.pth')
+                    else:
+                        steps_without_improvement += eval_every
+                        if steps_without_improvement >= 5000:
+                            logging.info("Early stopping triggered")
+                            break
 
         except KeyboardInterrupt:
             logging.info("Training interrupted by user.")
         except Exception as e:
             logging.error(f"An error occurred during training: {str(e)}")
         finally:
-            logging.info("Saving model checkpoint...")
-            self.save_checkpoint()
+            logging.info("Saving final model checkpoint...")
+            self.save_checkpoint(filename='final_model_checkpoint.pth')
 
     def interactive_mode(self):
         print("Entering interactive mode. Type 'exit' to quit.")
@@ -84,20 +101,17 @@ class TextTrainer:
         
         if self.data_generator.vocab_size > old_vocab_size:
             self.model.expand_embedding(self.data_generator.vocab_size)
-            self.optimizer = optim.Adam(self.model.parameters(), lr=self.optimizer.param_groups[0]['lr'])
+            self.optimizer = optim.Adam(self.model.parameters(), lr=self.scheduler.get_last_lr()[0])
+            self.scheduler = StepLR(self.optimizer, step_size=1000, gamma=0.1)
             logging.info("Model updated with new vocabulary")
 
         self.train_step()
-
-    def adjust_learning_rate(self, decay_factor: float = 0.1) -> None:
-        for param_group in self.optimizer.param_groups:
-            param_group['lr'] *= decay_factor
-        logging.info(f"Learning rate adjusted to {self.optimizer.param_groups[0]['lr']:.6f}")
 
     def save_checkpoint(self, filename: str = 'model_checkpoint.pth') -> None:
         checkpoint = {
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict(),
             'vocab_size': self.model.vocab_size,
             'embedding_size': self.model.embed_size,
             'hidden_sizes': self.model.hidden_sizes,
@@ -110,6 +124,7 @@ class TextTrainer:
         checkpoint = torch.load(filename, map_location=self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
         self.model.vocab_size = checkpoint['vocab_size']
         self.model.embed_size = checkpoint['embedding_size']
         self.model.hidden_sizes = checkpoint['hidden_sizes']
@@ -126,7 +141,7 @@ class TextTrainer:
                 x, y_true = self.data_generator.generate_batch()
                 x, y_true = x.to(self.device), y_true.to(self.device)
 
-                y_pred, _, _ = self.model(x)
+                y_pred, _ = self.model(x)
                 loss = self.criterion(y_pred.view(-1, self.model.vocab_size), y_true.view(-1))
                 perplexity = torch.exp(loss)
 
