@@ -34,7 +34,7 @@ class TextTrainer:
     def generate_text(self, start_text: str, gen_length: int, temperature: float = 0.5) -> str:
         return self.model.generate(self.data_generator, start_text, gen_length, temperature)
 
-    def continual_train_and_generate(self, num_steps: int, print_every: int = 100, gen_length: int = 100):
+    def train(self, num_steps: int, print_every: int = 100):
         try:
             for step in range(1, num_steps + 1):
                 loss, perplexity = self.train_step()
@@ -42,13 +42,6 @@ class TextTrainer:
                 if step % print_every == 0:
                     logging.info(f"Step {step}/{num_steps}")
                     logging.info(f"Loss: {loss:.4f}, Perplexity: {perplexity:.4f}")
-
-                    start_text = ''.join(list(self.data_generator.text_buffer)[:10])
-                    generated_text = self.generate_text(start_text, gen_length)
-                    logging.info(f"Generated text:\n{generated_text}\n")
-                    logging.info("-" * 50)
-
-                    self.update_model_with_new_text(generated_text)
 
                 if step % (print_every * 10) == 0:
                     self.adjust_learning_rate()
@@ -61,6 +54,30 @@ class TextTrainer:
             logging.info("Saving model checkpoint...")
             self.save_checkpoint()
 
+    def interactive_mode(self):
+        print("Entering interactive mode. Type 'exit' to quit.")
+        conversation_history = []
+        
+        while True:
+            user_input = input("You: ")
+            if user_input.lower() == 'exit':
+                break
+
+            conversation_history.append(f"{user_input}")
+            context = "\n".join(conversation_history[-5:])
+
+            model_response = self.generate_text(context, gen_length=50)
+            
+            clean_response = model_response.replace(f"{context}", "").strip()
+            
+            print(f"Model: {clean_response}")
+
+            conversation_history.append(f"{clean_response}")
+
+            self.update_model_with_new_text(user_input + "\n" + clean_response)
+
+        print("Exiting interactive mode.")
+
     def update_model_with_new_text(self, new_text: str) -> None:
         old_vocab_size = self.model.vocab_size
         self.data_generator.add_new_text(new_text)
@@ -69,6 +86,8 @@ class TextTrainer:
             self.model.expand_embedding(self.data_generator.vocab_size)
             self.optimizer = optim.Adam(self.model.parameters(), lr=self.optimizer.param_groups[0]['lr'])
             logging.info("Model updated with new vocabulary")
+
+        self.train_step()
 
     def adjust_learning_rate(self, decay_factor: float = 0.1) -> None:
         for param_group in self.optimizer.param_groups:

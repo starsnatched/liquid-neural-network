@@ -17,7 +17,6 @@ def parse_arguments():
     parser.add_argument('--learning_rate', type=float, default=1e-5, help='Learning rate')
     parser.add_argument('--num_steps', type=int, default=500, help='Number of training steps')
     parser.add_argument('--print_every', type=int, default=100, help='Print status every n steps')
-    parser.add_argument('--gen_length', type=int, default=100, help='Length of generated text')
     parser.add_argument('--checkpoint', type=str, default=None, help='Path to load checkpoint from')
     return parser.parse_args()
 
@@ -55,18 +54,18 @@ def main():
         if args.checkpoint:
             trainer.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-        logging.info("Starting continual learning process...")
-        trainer.continual_train_and_generate(args.num_steps, args.print_every, args.gen_length)
+        logging.info("Starting training process...")
+        trainer.train(args.num_steps, args.print_every)
 
-        logging.info("Performing final evaluation...")
-        trainer.evaluate()
+        logging.info("Training complete. Starting interactive mode...")
+        trainer.interactive_mode()
 
     except FileNotFoundError:
         logging.error(f"Input file not found: {args.file_path}")
     except torch.cuda.OutOfMemoryError:
         logging.error("CUDA out of memory. Try reducing batch size or model size.")
     except KeyboardInterrupt:
-        logging.info("Training interrupted by user.")
+        logging.info("Program interrupted by user.")
     except Exception as e:
         logging.error(f"An unexpected error occurred: {str(e)}", exc_info=True)
 
