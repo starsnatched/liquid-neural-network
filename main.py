@@ -8,7 +8,7 @@ from src.trainer import TextTrainer
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Liquid Neural Network Text Generation")
+    parser = argparse.ArgumentParser(description="Liquid Time-constant Networks for Text Generation")
     parser.add_argument('--file_path', type=str, default='bible.txt', help='Path to the input text file')
     parser.add_argument('--batch_size', type=int, default=32, help='Batch size for training')
     parser.add_argument('--sequence_length', type=int, default=128, help='Sequence length for training')
