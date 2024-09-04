@@ -3,7 +3,6 @@ import numpy as np
 import logging
 from collections import deque
 from typing import List, Tuple
-import os
 
 class TextDataGenerator:
     def __init__(self, file_path: str, batch_size: int, sequence_length: int, buffer_size: int = 10000):
@@ -19,9 +18,6 @@ class TextDataGenerator:
         self.idx_to_char = {i: ch for i, ch in enumerate(self.chars)}
 
     def load_initial_text(self) -> None:
-        if not os.path.exists(self.file_path):
-            raise FileNotFoundError(f"File not found: {self.file_path}")
-        
         try:
             with open(self.file_path, 'r', encoding='utf-8') as file:
                 initial_text = file.read(self.buffer_size)
@@ -72,6 +68,3 @@ class TextDataGenerator:
 
     def __len__(self) -> int:
         return len(self.text_buffer)
-
-    def get_vocab_size(self) -> int:
-        return self.vocab_size

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+
 from typing import List
 
 class LiquidNeuralNetwork(nn.Module):
@@ -33,17 +34,12 @@ class LiquidNeuralNetwork(nn.Module):
         self.log_dt = nn.Parameter(torch.log(torch.tensor(dt)))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.dim() != 2:
-            raise ValueError(f"Expected input to be 2-dimensional, got {x.dim()}-dimensional tensor")
-        
         batch_size, seq_len = x.size()
-        if seq_len != self.sequence_length:
-            raise ValueError(f"Expected sequence length {self.sequence_length}, got {seq_len}")
         
         x = self.embedding(x)
         x = self.positional_encoding(x.transpose(0, 1)).transpose(0, 1)
         
-        self.dt = torch.exp(self.log_dt).clamp(min=1e-5, max=10)
+        self.dt = torch.exp(self.log_dt)
 
         for layer in self.liquid_layers:
             layer.dt = self.dt
@@ -57,15 +53,6 @@ class LiquidNeuralNetwork(nn.Module):
         output = self.output_layer(x)
 
         return output
-
-    def get_config(self):
-        return {
-            'vocab_size': self.vocab_size,
-            'embed_size': self.embed_size,
-            'hidden_sizes': self.hidden_sizes,
-            'sequence_length': self.sequence_length,
-            'dt': self.dt.item()
-        }
 
 class LiquidLayer(nn.Module):
     def __init__(self, in_features: int, out_features: int, sequence_length: int, dt: float = 1.0):
